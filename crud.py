@@ -1,67 +1,63 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Optional, List
+from typing import List
 
-app = FastAPI(title="FastAPI CRUD Example")
-
-# In-memory database simulation
-fake_db = {}
-
-# Pydantic Models for Data Validation
-class Item(BaseModel):
+# --- নতুন মডেল এবং ডাটাবেজ ---
+class Category(BaseModel):
+    id: int
     name: str
-    description: Optional[str] = None
-    price: float
-    tax: Optional[float] = None
+    is_active: bool = True
 
-class ItemUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    price: Optional[float] = None
-    tax: Optional[float] = None
+# ইন-মেমোরি ক্যাটাগরি ডাটাবেজ
+categories_db = {}
 
+# 1. CREATE Category (POST)
+@app.post("/categories/{category_id}", response_model=Category)
+def create_category(category_id: int, category: Category):
+    if category_id in categories_db:
+        raise HTTPException(status_code=400, detail="Category already exists")
+    categories_db[category_id] = category.dict()
+    return category
 
-# 1. CREATE (POST)
-@app.post("/items/{item_id}", response_model=Item)
-def create_item(item_id: int, item: Item):
-    if item_id in fake_db:
-        raise HTTPException(status_code=400, detail="Item already exists")
-    fake_db[item_id] = item.dict()
-    return item
+# 2. READ Categories (GET)
+@app.get("/categories/", response_model=dict)
+def read_categories():
+    return categories_db
 
+# 3. ADVANCED SEARCH & FILTERING (GET)
+@app.get("/items/search/", response_model=List[dict])
+def search_items(keyword: Optional[str] = None, max_price: Optional[float] = None):
+    """
+    ফিল্টারিং লজিক: নাম বা ডেসক্রিপশনের ভেতরে কিওয়ার্ড ম্যাচ করে এবং প্রাইসের ওপর ভিত্তি করে আইটেম ফিল্টার করবে।
+    """
+    matched_items = []
+    for item_id, item in fake_db.items():
+        # কিওয়ার্ড চেক
+        if keyword:
+            name_match = keyword.lower() in item.get("name", "").lower()
+            desc_match = keyword.lower() in item.get("description", "").lower()
+            if not (name_match or desc_match):
+                continue
+        
+        # ম্যাক্স প্রাইস চেক
+        if max_price is not None and item.get("price", 0) > max_price:
+            continue
+            
+        matched_items.append({"item_id": item_id, **item})
+        
+    return matched_items
 
-# 2. READ (GET - All items)
-@app.get("/items/", response_model=dict)
-def read_items():
-    return fake_db
-
-
-# 2. READ (GET - Single item by ID)
-@app.get("/items/{item_id}", response_model=Item)
-def read_item(item_id: int):
-    if item_id not in fake_db:
-        raise HTTPException(status_code=404, detail="Item not found")
-    return fake_db[item_id]
-
-
-# 3. UPDATE (PUT - Full or partial update using ItemUpdate)
-@app.put("/items/{item_id}", response_model=Item)
-def update_item(item_id: int, item_update: ItemUpdate):
-    if item_id not in fake_db:
-        raise HTTPException(status_code=404, detail="Item not found")
+# 4. STATS / ANALYTICS ENDPOINT (GET)
+@app.get("/items/stats/summary")
+def get_items_statistics():
+    total_items = len(fake_db)
+    if total_items == 0:
+        return {"total_items": 0, "average_price": 0.0, "max_price": 0.0}
     
-    stored_item_data = fake_db[item_id]
-    update_data = item_update.dict(exclude_unset=True)
+    prices = [item["price"] for item in fake_db.values()]
+    avg_price = sum(prices) / total_items
+    highest_price = max(prices)
     
-    updated_item = {**stored_item_data, **update_data}
-    fake_db[item_id] = updated_item
-    return updated_item
-
-
-# 4. DELETE (DELETE)
-@app.delete("/items/{item_id}")
-def delete_item(item_id: int):
-    if item_id not in fake_db:
-        raise HTTPException(status_code=404, detail="Item not found")
-    del fake_db[item_id]
-    return {"message": "Item deleted successfully"}
+    return {
+        "total_items": total_items,
+        "average_price": round(avg_price, 2),
+        "highest_price": highest_price
+    }
