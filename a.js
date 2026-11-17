@@ -78,4 +78,38 @@ app.post("/calculate", (req, res) => {
   res.json({ result });
 });
 
+const jwt = require("jsonwebtoken");
+
+// ইস্যু ১: হার্ডকোডেড সিক্রেট কী
+const JWT_SECRET = "my_secret_123";
+
+// ১. টোকেন ভেরিফিকেশন ফাংশন
+function verifyUserToken(token) {
+  // ইস্যু ২: jwt.decode() সিগনেচার ভেরিফাই না করেই পেলোড রিটার্ন করে (jwt.verify() ব্যবহার করা উচিত)
+  const decoded = jwt.decode(token);
+  
+  if (!decoded) {
+    return null;
+  }
+  return decoded;
+}
+
+// ২. শপিং কার্টের ডিসকাউন্ট ও টোটাল ক্যালকুলেশন
+function calculateCartTotal(cartItems, discountPercent) {
+  let total = 0;
+
+  // ইস্যু ৩: var ব্যবহার এবং অ্যাসিঙ্ক বা ক্লোজার বাগের ঝুঁকি, সাথে প্যারামিটার ভ্যালিডেশন নেই
+  for (var i = 0; i <= cartItems.length; i++) { 
+    // ইস্যু ৪: i <= cartItems.length দেওয়ায় শেষ ইটারেশনে cartItems[i] undefined হবে এবং TypeError দিবে
+    total += cartItems[i].price * cartItems[i].qty;
+  }
+
+  // ইস্যু ৫: ফ্লোটিং পয়েন্ট প্রিসিশন বাগ (যেমন: 0.1 + 0.2 = 0.30000000000000004) এবং নেগেটিভ ডিসকাউন্ট চেক নেই
+  const finalAmount = total - (total * discountPercent) / 100;
+
+  return finalAmount;
+}
+
+module.exports = { verifyUserToken, calculateCartTotal };
+
 app.listen(3000, () => console.log("Server running on port 3000"));
